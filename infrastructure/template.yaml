@@ -1,0 +1,278 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: >
+  Architecture IoT Big Data - Pipeline d'ingestion temps reel avec
+  API Gateway, Lambda, S3 (Data Lake), DynamoDB (Feature Store),
+  CloudFront (CDN ingestion + documentation OAC)
+
+Parameters:
+  Environment:
+    Type: String
+    Description: Nom de l'environnement
+    Default: 'yadjassem'
+
+Resources:
+
+  # ============================================================
+  # 1. STOCKAGE - S3 Data Lake (raw zone)
+  # ============================================================
+  DataLakeBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'exam-iot-data-lake-${Environment}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # ============================================================
+  # 2. STOCKAGE - DynamoDB Feature Store
+  # ============================================================
+  FeatureStoreTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'exam-iot-feature-store-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: request_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: request_id
+          KeyType: HASH
+
+  # ============================================================
+  # 3. IAM - Role d'execution Lambda
+  # ============================================================
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'exam-iot-lambda-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+      Policies:
+        - PolicyName: !Sub 'exam-iot-lambda-policy-${Environment}'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:PutObject'
+                Resource: !Sub '${DataLakeBucket.Arn}/*'
+              - Effect: Allow
+                Action:
+                  - 'dynamodb:PutItem'
+                Resource: !GetAtt FeatureStoreTable.Arn
+
+  # ============================================================
+  # 4. COMPUTE - Fonction Lambda d'ingestion
+  # ============================================================
+  IngestionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'exam-iot-ingestion-${Environment}'
+      Handler: main.handler
+      CodeUri: '../src'
+      Runtime: python3.11
+      Timeout: 30
+      MemorySize: 256
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          S3_BUCKET: !Ref DataLakeBucket
+          DYNAMODB_TABLE: !Ref FeatureStoreTable
+
+  # ============================================================
+  # 5. API GATEWAY - Point d'entree HTTP
+  # ============================================================
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub '${AWS::StackName}-IoT-API'
+      ProtocolType: HTTP
+
+  LambdaIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt IngestionFunction.Arn
+      PayloadFormatVersion: '2.0'
+
+  IngestRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: 'POST /ingest'
+      Target: !Sub 'integrations/${LambdaIntegration}'
+
+  ApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: '$default'
+      AutoDeploy: true
+
+  ApiGatewayLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref IngestionFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*'
+
+  # ============================================================
+  # 6. CDN INGESTION - CloudFront devant API Gateway
+  # ============================================================
+  IngestionCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties:
+      CachePolicyConfig:
+        Name: !Sub '${AWS::StackName}-IngestionCacheDisabled'
+        DefaultTTL: 0
+        MinTTL: 0
+        MaxTTL: 0
+        ParametersInCacheKeyAndForwardedToOrigin:
+          CookiesConfig:
+            CookieBehavior: none
+          HeadersConfig:
+            HeaderBehavior: none
+          QueryStringsConfig:
+            QueryStringBehavior: none
+          EnableAcceptEncodingGzip: false
+
+  IngestionOriginRequestPolicy:
+    Type: AWS::CloudFront::OriginRequestPolicy
+    Properties:
+      OriginRequestPolicyConfig:
+        Name: !Sub '${AWS::StackName}-IngestionForwardAll'
+        CookiesConfig:
+          CookieBehavior: none
+        HeadersConfig:
+          HeaderBehavior: whitelist
+          Headers:
+            - Content-Type
+            - Accept
+        QueryStringsConfig:
+          QueryStringBehavior: all
+
+  IngestionCloudFront:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub 'CDN Ingestion IoT - ${Environment}'
+        DefaultCacheBehavior:
+          TargetOriginId: ApiGatewayOrigin
+          ViewerProtocolPolicy: https-only
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+            - PUT
+            - POST
+            - PATCH
+            - DELETE
+          CachePolicyId: !Ref IngestionCachePolicy
+          OriginRequestPolicyId: !Ref IngestionOriginRequestPolicy
+        Origins:
+          - Id: ApiGatewayOrigin
+            DomainName: !Sub '${HttpApi}.execute-api.${AWS::Region}.amazonaws.com'
+            CustomOriginConfig:
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+
+  # ============================================================
+  # 7. DOCUMENTATION - Bucket S3 prive + CloudFront OAC
+  # ============================================================
+  DocBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'exam-iot-tech-doc-${Environment}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  DocOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${AWS::StackName}-DocOAC'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  DocCloudFront:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub 'CDN Documentation technique - ${Environment}'
+        DefaultRootObject: index.html
+        DefaultCacheBehavior:
+          TargetOriginId: DocS3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+          CachePolicyId: '658327ea-f89d-4fab-a63d-7e88639e58f6'  # CachingOptimized managed policy
+        Origins:
+          - Id: DocS3Origin
+            DomainName: !GetAtt DocBucket.RegionalDomainName
+            OriginAccessControlId: !Ref DocOAC
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+
+  DocBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DocBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontOAC
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: 's3:GetObject'
+            Resource: !Sub '${DocBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                'AWS:SourceArn': !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${DocCloudFront}'
+
+# ============================================================
+# OUTPUTS
+# ============================================================
+Outputs:
+  ApiEndpoint:
+    Description: URL directe de l'API Gateway
+    Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/ingest'
+
+  CloudFrontIngestionURL:
+    Description: URL CloudFront pour l'ingestion IoT (POST)
+    Value: !Sub 'https://${IngestionCloudFront.DomainName}/ingest'
+
+  CloudFrontDocURL:
+    Description: URL CloudFront pour la documentation technique
+    Value: !Sub 'https://${DocCloudFront.DomainName}'
+
+  DataLakeBucketName:
+    Description: Nom du bucket S3 Data Lake
+    Value: !Ref DataLakeBucket
+
+  FeatureStoreTableName:
+    Description: Nom de la table DynamoDB
+    Value: !Ref FeatureStoreTable
+
+  DocBucketName:
+    Description: Nom du bucket S3 documentation
+    Value: !Ref DocBucket
