@@ -32,7 +32,7 @@ clean:
 
 build:
 	@echo "Building SAM application..."
-	sam build --region $(AWS_REGION) --template-file $(TEMPLATE)
+	sam build --use-container --region $(AWS_REGION) --template-file $(TEMPLATE)
 
 deploy: build
 	@echo "Deploying to AWS..."
