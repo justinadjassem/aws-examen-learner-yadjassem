@@ -21,3 +21,9 @@ Thumbs.db
 
 # Environment
 .env
+
+# Sujet du projet
+Projet Big Data*
+
+# PyCharm default file
+/main.py
