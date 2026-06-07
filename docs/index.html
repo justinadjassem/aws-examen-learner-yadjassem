@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Big Data &amp; IA — Architecture IoT sur AWS</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            line-height: 1.6;
+            color: #1a1a1a;
+            background: #faf9f7;
+        }
+
+        /* ---- NAVBAR ---- */
+        .navbar {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+            display: flex; align-items: center; justify-content: space-between;
+            height: 56px; padding: 0 2rem;
+            background: #ffffff;
+            border-bottom: 1px solid #e8e5e1;
+        }
+        .navbar-left { display: flex; align-items: center; gap: 1.2rem; }
+        .navbar-logo {
+            font-weight: 800; font-size: 0.85rem; color: #1a1a1a;
+            text-decoration: none; text-transform: uppercase; letter-spacing: 0.08em;
+        }
+
+        /* ---- LAYOUT ---- */
+        .layout {
+            display: flex;
+            margin-top: 56px;
+            min-height: calc(100vh - 56px);
+        }
+
+        /* ---- SIDEBAR GAUCHE ---- */
+        .sidebar-left {
+            width: 240px; min-width: 240px;
+            padding: 1.5rem 0 2rem 0;
+            border-right: 1px solid #e8e5e1;
+            overflow-y: auto;
+            height: calc(100vh - 56px);
+            position: sticky; top: 56px;
+            background: #ffffff;
+        }
+        .sidebar-section { margin-bottom: 0.25rem; }
+        .sidebar-heading {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0.55rem 1.25rem;
+            font-size: 0.8rem; font-weight: 700; color: #1a1a1a;
+            cursor: pointer; user-select: none;
+            transition: background 0.15s;
+        }
+        .sidebar-heading:hover { background: #f8f7f5; }
+        .sidebar-heading svg {
+            width: 14px; height: 14px; stroke: #b0aba5;
+            transition: transform 0.2s;
+        }
+        .sidebar-heading.collapsed svg { transform: rotate(-90deg); }
+        .sidebar-items { padding: 0.1rem 0; }
+        .sidebar-heading.collapsed + .sidebar-items { display: none; }
+        .sidebar-item {
+            display: flex; align-items: center; gap: 0.4rem;
+            padding: 0.4rem 1.25rem 0.4rem 1.75rem;
+            font-size: 0.82rem; color: #8a8580;
+            cursor: pointer; transition: all 0.15s;
+            text-decoration: none;
+        }
+        .sidebar-item:hover { background: #f8f7f5; color: #1a1a1a; }
+        .sidebar-item.active {
+            color: #1a1a1a; font-weight: 600;
+            background: #f3f1ee;
+        }
+        .badge-sm {
+            font-size: 0.6rem; font-weight: 600; color: #8a8580; background: #f3f1ee;
+            padding: 0.1rem 0.4rem; border-radius: 4px; text-transform: uppercase;
+        }
+
+        /* ---- CONTENU PRINCIPAL ---- */
+        .main-content {
+            flex: 1; min-width: 0;
+            padding: 2.5rem 3rem 4rem 3rem;
+            max-width: 800px;
+        }
+        .breadcrumb {
+            display: flex; align-items: center; gap: 0.4rem;
+            font-size: 0.78rem; color: #b0aba5; margin-bottom: 2rem;
+        }
+        .breadcrumb a { color: #8a8580; text-decoration: none; }
+        .breadcrumb a:hover { color: #1a1a1a; text-decoration: underline; }
+        .breadcrumb .sep { color: #d5d0cb; }
+
+        .main-content h1 {
+            font-size: 2rem; font-weight: 800; color: #1a1a1a;
+            margin-bottom: 0.5rem; letter-spacing: -0.02em;
+        }
+        .main-content .subtitle {
+            font-size: 0.95rem; color: #8a8580; margin-bottom: 2.5rem;
+            line-height: 1.7;
+        }
+        .main-content h2 {
+            font-size: 1.3rem; font-weight: 700; color: #1a1a1a;
+            margin: 2.5rem 0 0.75rem 0; padding-top: 1.5rem;
+            border-top: 1px solid #e8e5e1;
+        }
+        .main-content h2:first-of-type { border-top: none; padding-top: 0; }
+        .main-content h3 {
+            font-size: 0.95rem; font-weight: 600; color: #1a1a1a;
+            margin: 1.25rem 0 0.4rem 0;
+        }
+        .main-content p { margin-bottom: 1rem; color: #5c5652; font-size: 0.9rem; }
+
+        /* Code preview */
+        .code-preview {
+            background: #f3f1ee; border: 1px solid #e8e5e1; border-radius: 10px;
+            padding: 0.85rem 1.1rem; margin-bottom: 2rem;
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 0.85rem; color: #1a1a1a;
+        }
+        .code-preview .kw { color: #1a1a1a; font-weight: 700; }
+        .code-preview .fn { color: #5c5652; }
+
+        /* Code block */
+        .code-block {
+            background: #1a1a1a; border-radius: 10px;
+            margin: 0.75rem 0 1.5rem 0; overflow: hidden;
+        }
+        .code-block-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0.55rem 1rem; background: #111111;
+            font-size: 0.72rem; color: #6b6560; font-weight: 500;
+        }
+        .code-block-body { padding: 0.85rem 0; overflow-x: auto; }
+        .code-line {
+            display: flex; padding: 0 1rem; line-height: 1.75;
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 0.82rem;
+        }
+        .code-line:hover { background: rgba(255,255,255,0.03); }
+        .code-line-number {
+            width: 32px; min-width: 32px; text-align: right;
+            color: #4a4540; user-select: none; padding-right: 1rem;
+        }
+        .code-line-content { color: #d5d0cb; white-space: pre; }
+        .code-line-content .kw { color: #e8c898; }
+        .code-line-content .fn { color: #b0c4de; }
+        .code-line-content .str { color: #a8c79a; }
+        .code-line-content .cm { color: #5c5652; font-style: italic; }
+        .code-line-content .num { color: #d4a574; }
+        .code-line.highlighted { background: rgba(255,255,255,0.05); }
+
+        /* Table */
+        table {
+            width: 100%; border-collapse: collapse; margin: 0.75rem 0 1.5rem 0;
+            font-size: 0.85rem;
+        }
+        th {
+            text-align: left; padding: 0.65rem 0.85rem; font-weight: 600;
+            color: #1a1a1a; background: #f3f1ee; border-bottom: 1px solid #e8e5e1;
+            font-size: 0.8rem;
+        }
+        td {
+            padding: 0.6rem 0.85rem; border-bottom: 1px solid #f0ede9; color: #5c5652;
+        }
+        tr:hover td { background: #faf9f7; }
+        td code {
+            background: #f3f1ee; color: #1a1a1a; padding: 0.15rem 0.4rem;
+            border-radius: 4px; font-size: 0.78rem; font-weight: 500;
+        }
+
+        /* ---- SIDEBAR DROITE ---- */
+        .sidebar-right {
+            width: 200px; min-width: 200px;
+            padding: 2.5rem 1.25rem 2rem 1rem;
+            position: sticky; top: 56px;
+            height: calc(100vh - 56px);
+            overflow-y: auto;
+        }
+        .toc-title {
+            font-size: 0.72rem; font-weight: 700; color: #1a1a1a;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            margin-bottom: 0.75rem;
+        }
+        .toc-section { margin-bottom: 0.75rem; }
+        .toc-section-title {
+            font-size: 0.72rem; font-weight: 600; color: #1a1a1a;
+            margin-bottom: 0.25rem;
+        }
+        .toc-link {
+            display: block; font-size: 0.75rem; color: #8a8580;
+            text-decoration: none; padding: 0.15rem 0;
+            transition: color 0.15s;
+        }
+        .toc-link:hover { color: #1a1a1a; }
+        .toc-active-link {
+            display: block; padding: 0.35rem 0.65rem; margin: 0 -0.65rem 0.5rem;
+            background: #1a1a1a; border-radius: 6px;
+            font-size: 0.78rem; font-weight: 600; color: #ffffff;
+            text-decoration: none;
+        }
+
+        @media (max-width: 1100px) { .sidebar-right { display: none; } }
+        @media (max-width: 768px) {
+            .sidebar-left { display: none; }
+            .main-content { padding: 1.5rem 1rem; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ---- NAVBAR ---- -->
+<nav class="navbar">
+    <div class="navbar-left">
+        <a href="#" class="navbar-logo">IoT Platform — Big Data &amp; IA</a>
+    </div>
+</nav>
+
+<!-- ---- LAYOUT ---- -->
+<div class="layout">
+
+    <!-- SIDEBAR GAUCHE -->
+    <aside class="sidebar-left">
+        <div class="sidebar-section">
+            <div class="sidebar-heading" onclick="this.classList.toggle('collapsed')">
+                Infrastructure
+                <svg fill="none" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+            </div>
+            <div class="sidebar-items">
+                <a href="#architecture" class="sidebar-item active">Architecture globale</a>
+                <a href="#services" class="sidebar-item">Services AWS</a>
+                <a href="#cloudformation" class="sidebar-item">CloudFormation <span class="badge-sm">SAM</span></a>
+            </div>
+        </div>
+
+        <div class="sidebar-section">
+            <div class="sidebar-heading" onclick="this.classList.toggle('collapsed')">
+                API Ingestion
+                <svg fill="none" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+            </div>
+            <div class="sidebar-items">
+                <a href="#post-ingest" class="sidebar-item">POST /ingest</a>
+            </div>
+        </div>
+
+        <div class="sidebar-section">
+            <div class="sidebar-heading" onclick="this.classList.toggle('collapsed')">
+                Stockage
+                <svg fill="none" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+            </div>
+            <div class="sidebar-items">
+                <a href="#data-lake" class="sidebar-item">S3 Data Lake</a>
+                <a href="#feature-store" class="sidebar-item">DynamoDB Feature Store</a>
+                <a href="#partitioning" class="sidebar-item">Partitionnement</a>
+            </div>
+        </div>
+
+        <div class="sidebar-section">
+            <div class="sidebar-heading" onclick="this.classList.toggle('collapsed')">
+                CDN &amp; Securite
+                <svg fill="none" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+            </div>
+            <div class="sidebar-items">
+                <a href="#cloudfront-api" class="sidebar-item">CloudFront Ingestion</a>
+                <a href="#cloudfront-docs" class="sidebar-item">CloudFront Docs (OAC)</a>
+            </div>
+        </div>
+
+        <div class="sidebar-section">
+            <div class="sidebar-heading" onclick="this.classList.toggle('collapsed')">
+                Lambda
+                <svg fill="none" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+            </div>
+            <div class="sidebar-items">
+                <a href="#handler" class="sidebar-item">Handler principal</a>
+                <a href="#metriques" class="sidebar-item">Calcul de metriques</a>
+            </div>
+        </div>
+    </aside>
+
+    <!-- CONTENU PRINCIPAL -->
+    <main class="main-content">
+
+        <div class="breadcrumb">
+            <a href="#">Accueil</a> <span class="sep">/</span>
+            <a href="#">Documentation</a> <span class="sep">/</span>
+            <span>Architecture</span>
+        </div>
+
+        <h1 id="architecture">Big Data &amp; IA — Architecture IoT sur AWS</h1>
+        <p class="subtitle">
+            Plateforme serverless AWS pour l'ingestion et le traitement en temps reel de donnees
+            transmises par des capteurs IoT industriels. Les flux HTTP POST sont traites par AWS Lambda (Python 3.11),
+            stockes dans un Data Lake S3 partitionne et un Feature Store DynamoDB,
+            le tout accelere par Amazon CloudFront.
+        </p>
+
+        <div class="code-preview">
+            <span class="kw">POST</span> /ingest &rarr; <span class="fn">CloudFront</span> &rarr; <span class="fn">API Gateway</span> &rarr; <span class="fn">Lambda</span> &rarr; <span class="fn">S3 + DynamoDB</span>
+        </div>
+
+        <h2 id="services">Services AWS</h2>
+        <table>
+            <thead>
+                <tr><th>Service</th><th>Role</th><th>Details</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>CloudFront</code></td><td>CDN Ingestion</td><td>Acceleration globale des requetes POST vers l'API</td></tr>
+                <tr><td><code>API Gateway v2</code></td><td>Point d'entree HTTP</td><td>Route POST /ingest vers la fonction Lambda</td></tr>
+                <tr><td><code>Lambda</code></td><td>Traitement temps reel</td><td>Python 3.11 — Parse JSON, calcule les metriques, ecrit dans S3 et DynamoDB</td></tr>
+                <tr><td><code>S3</code></td><td>Data Lake brut</td><td>Stockage partitionne : raw-zone/year=YYYY/month=MM/</td></tr>
+                <tr><td><code>DynamoDB</code></td><td>Feature Store</td><td>Rapports d'execution condenses par requete (PAY_PER_REQUEST)</td></tr>
+                <tr><td><code>CloudFront + OAC</code></td><td>CDN Documentation</td><td>Acces securise au bucket S3 prive de documentation</td></tr>
+                <tr><td><code>CloudFormation</code></td><td>IaC (SAM)</td><td>Deploiement automatise de toute l'infrastructure</td></tr>
+                <tr><td><code>CloudWatch</code></td><td>Monitoring</td><td>Logs d'execution Lambda (succes et erreurs)</td></tr>
+            </tbody>
+        </table>
+
+        <h2 id="cloudformation">Infrastructure as Code (SAM)</h2>
+        <p>
+            L'ensemble de l'infrastructure est definie dans un template AWS SAM (<code>template.yaml</code>)
+            et deployee automatiquement via CloudFormation. Le deploiement se fait en une seule commande :
+            <code>make deploy</code>.
+        </p>
+
+        <h2 id="post-ingest">POST /ingest</h2>
+        <p>Endpoint unique pour l'ingestion des donnees capteurs IoT. Accessible via l'URL CloudFront.</p>
+
+        <h3>Corps de la requete</h3>
+        <div class="code-block">
+            <div class="code-block-header"><span>JSON — Request Body</span><span>application/json</span></div>
+            <div class="code-block-body">
+                <div class="code-line"><span class="code-line-number">1</span><span class="code-line-content">{</span></div>
+                <div class="code-line"><span class="code-line-number">2</span><span class="code-line-content">  <span class="str">"sensor_id"</span>: <span class="str">"sensor-01"</span>,</span></div>
+                <div class="code-line"><span class="code-line-number">3</span><span class="code-line-content">  <span class="str">"readings"</span>: [</span></div>
+                <div class="code-line highlighted"><span class="code-line-number">4</span><span class="code-line-content">    { <span class="str">"temperature"</span>: <span class="num">22.5</span>, <span class="str">"status"</span>: <span class="str">"OK"</span> },</span></div>
+                <div class="code-line highlighted"><span class="code-line-number">5</span><span class="code-line-content">    { <span class="str">"temperature"</span>: <span class="num">35.1</span>, <span class="str">"status"</span>: <span class="str">"ERROR"</span> },</span></div>
+                <div class="code-line highlighted"><span class="code-line-number">6</span><span class="code-line-content">    { <span class="str">"temperature"</span>: <span class="num">19.8</span>, <span class="str">"status"</span>: <span class="str">"OK"</span> },</span></div>
+                <div class="code-line highlighted"><span class="code-line-number">7</span><span class="code-line-content">    { <span class="str">"temperature"</span>: <span class="num">28.3</span>, <span class="str">"status"</span>: <span class="str">"ERROR"</span> }</span></div>
+                <div class="code-line"><span class="code-line-number">8</span><span class="code-line-content">  ]</span></div>
+                <div class="code-line"><span class="code-line-number">9</span><span class="code-line-content">}</span></div>
+            </div>
+        </div>
+
+        <h3>Reponse (201 Created)</h3>
+        <div class="code-block">
+            <div class="code-block-header"><span>JSON — Response</span><span>201 Created</span></div>
+            <div class="code-block-body">
+                <div class="code-line"><span class="code-line-number">1</span><span class="code-line-content">{</span></div>
+                <div class="code-line"><span class="code-line-number">2</span><span class="code-line-content">  <span class="str">"message"</span>: <span class="str">"Ingestion successful"</span>,</span></div>
+                <div class="code-line"><span class="code-line-number">3</span><span class="code-line-content">  <span class="str">"request_id"</span>: <span class="str">"550e8400-e29b-41d4-a716-446655440000"</span>,</span></div>
+                <div class="code-line"><span class="code-line-number">4</span><span class="code-line-content">  <span class="str">"sensor_id"</span>: <span class="str">"sensor-01"</span>,</span></div>
+                <div class="code-line"><span class="code-line-number">5</span><span class="code-line-content">  <span class="str">"s3_path"</span>: <span class="str">"s3://exam-iot-data-lake-.../raw-zone/year=2026/month=06/..."</span>,</span></div>
+                <div class="code-line"><span class="code-line-number">6</span><span class="code-line-content">  <span class="str">"avg_temperature"</span>: <span class="num">26.43</span>,</span></div>
+                <div class="code-line"><span class="code-line-number">7</span><span class="code-line-content">  <span class="str">"error_count"</span>: <span class="num">2</span>,</span></div>
+                <div class="code-line"><span class="code-line-number">8</span><span class="code-line-content">  <span class="str">"total_readings"</span>: <span class="num">4</span></span></div>
+                <div class="code-line"><span class="code-line-number">9</span><span class="code-line-content">}</span></div>
+            </div>
+        </div>
+
+        <h2 id="handler">Lambda Handler</h2>
+        <p>Le handler (<code>main.handler</code>) recoit les evenements API Gateway v2 et effectue le pipeline d'ingestion complet.</p>
+        <div class="code-block">
+            <div class="code-block-header"><span>src/main.py</span><span>Python 3.11</span></div>
+            <div class="code-block-body">
+                <div class="code-line"><span class="code-line-number">1</span><span class="code-line-content"><span class="kw">import</span> json, os, uuid</span></div>
+                <div class="code-line"><span class="code-line-number">2</span><span class="code-line-content"><span class="kw">from</span> datetime <span class="kw">import</span> datetime, timezone</span></div>
+                <div class="code-line"><span class="code-line-number">3</span><span class="code-line-content"><span class="kw">import</span> boto3</span></div>
+                <div class="code-line"><span class="code-line-number">4</span><span class="code-line-content"></span></div>
+                <div class="code-line"><span class="code-line-number">5</span><span class="code-line-content"><span class="kw">def</span> <span class="fn">handler</span>(event, context):</span></div>
+                <div class="code-line"><span class="code-line-number">6</span><span class="code-line-content">    body = json.loads(event[<span class="str">"body"</span>])</span></div>
+                <div class="code-line highlighted"><span class="code-line-number">7</span><span class="code-line-content">    <span class="cm"># 1. Parse sensor_id + readings</span></span></div>
+                <div class="code-line highlighted"><span class="code-line-number">8</span><span class="code-line-content">    <span class="cm"># 2. Sauvegarde brute dans S3 (partitionnement temporel)</span></span></div>
+                <div class="code-line highlighted"><span class="code-line-number">9</span><span class="code-line-content">    <span class="cm"># 3. Calcul avg_temperature + error_count</span></span></div>
+                <div class="code-line highlighted"><span class="code-line-number">10</span><span class="code-line-content">    <span class="cm"># 4. Ecriture rapport dans DynamoDB</span></span></div>
+                <div class="code-line"><span class="code-line-number">11</span><span class="code-line-content">    <span class="kw">return</span> {<span class="str">"statusCode"</span>: <span class="num">201</span>, ...}</span></div>
+            </div>
+        </div>
+
+        <h2 id="metriques">Calcul de metriques</h2>
+        <p>A chaque requete, la Lambda calcule a la volee :</p>
+        <table>
+            <thead>
+                <tr><th>Metrique</th><th>Formule</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>avg_temperature</code></td><td>sum(temperatures) / count</td><td>Temperature moyenne de la serie recue</td></tr>
+                <tr><td><code>error_count</code></td><td>count(status == "ERROR")</td><td>Nombre de mesures en anomalie</td></tr>
+                <tr><td><code>total_readings</code></td><td>len(readings)</td><td>Nombre total de mesures dans le payload</td></tr>
+            </tbody>
+        </table>
+
+        <h2 id="feature-store">Schema DynamoDB — Feature Store</h2>
+        <table>
+            <thead>
+                <tr><th>Attribut</th><th>Type</th><th>Cle</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>request_id</code></td><td>String</td><td>Partition Key</td><td>UUID v4 unique par requete</td></tr>
+                <tr><td><code>timestamp</code></td><td>String</td><td>—</td><td>Horodatage ISO 8601 UTC</td></tr>
+                <tr><td><code>sensor_id</code></td><td>String</td><td>—</td><td>Identifiant du capteur source</td></tr>
+                <tr><td><code>s3_path</code></td><td>String</td><td>—</td><td>Chemin S3 complet du fichier brut</td></tr>
+                <tr><td><code>avg_temperature</code></td><td>String</td><td>—</td><td>Temperature moyenne calculee</td></tr>
+                <tr><td><code>error_count</code></td><td>Number</td><td>—</td><td>Nombre de mesures en statut ERROR</td></tr>
+                <tr><td><code>total_readings</code></td><td>Number</td><td>—</td><td>Nombre total de mesures</td></tr>
+            </tbody>
+        </table>
+
+        <h2 id="data-lake">S3 Data Lake</h2>
+        <p>Le bucket S3 est entierement prive (PublicAccessBlock active). Les donnees brutes y sont stockees au format JSON.</p>
+
+        <h2 id="partitioning">Partitionnement S3</h2>
+        <p>Strategie de partitionnement temporel pour faciliter les requetes analytiques futures :</p>
+        <div class="code-block">
+            <div class="code-block-header"><span>Structure S3</span><span>Partitionnement mensuel</span></div>
+            <div class="code-block-body">
+                <div class="code-line"><span class="code-line-number">1</span><span class="code-line-content"><span class="fn">s3://</span>exam-iot-data-lake-{env}/</span></div>
+                <div class="code-line"><span class="code-line-number">2</span><span class="code-line-content">  <span class="fn">raw-zone/</span></span></div>
+                <div class="code-line"><span class="code-line-number">3</span><span class="code-line-content">    <span class="str">year=2026/</span></span></div>
+                <div class="code-line"><span class="code-line-number">4</span><span class="code-line-content">      <span class="str">month=01/</span></span></div>
+                <div class="code-line highlighted"><span class="code-line-number">5</span><span class="code-line-content">        sensor-01_&lt;uuid&gt;.json</span></div>
+                <div class="code-line highlighted"><span class="code-line-number">6</span><span class="code-line-content">        sensor-02_&lt;uuid&gt;.json</span></div>
+                <div class="code-line"><span class="code-line-number">7</span><span class="code-line-content">      <span class="str">month=06/</span></span></div>
+                <div class="code-line highlighted"><span class="code-line-number">8</span><span class="code-line-content">        sensor-01_&lt;uuid&gt;.json</span></div>
+            </div>
+        </div>
+
+        <h2 id="cloudfront-api">CloudFront — CDN Ingestion</h2>
+        <p>
+            Une distribution CloudFront est placee devant l'API Gateway pour accelerer la collecte globale
+            des donnees IoT. Le cache est desactive (TTL=0) car chaque requete POST doit atteindre la Lambda.
+            Seul le header <code>Content-Type</code> est forward vers l'origine.
+        </p>
+
+        <h2 id="cloudfront-docs">CloudFront — Documentation (OAC)</h2>
+        <p>
+            Le bucket S3 de documentation est <strong>entierement prive</strong>. L'acces public se fait uniquement
+            via une distribution CloudFront avec un <strong>Origin Access Control (OAC)</strong> qui signe
+            chaque requete avec SigV4. Toute tentative d'acces direct au bucket S3 retourne <strong>403 Access Denied</strong>.
+        </p>
+        <div class="code-block">
+            <div class="code-block-header"><span>template.yaml — OAC</span><span>YAML</span></div>
+            <div class="code-block-body">
+                <div class="code-line"><span class="code-line-number">1</span><span class="code-line-content"><span class="fn">DocOAC</span>:</span></div>
+                <div class="code-line"><span class="code-line-number">2</span><span class="code-line-content">  <span class="kw">Type</span>: AWS::CloudFront::OriginAccessControl</span></div>
+                <div class="code-line"><span class="code-line-number">3</span><span class="code-line-content">  <span class="kw">Properties</span>:</span></div>
+                <div class="code-line"><span class="code-line-number">4</span><span class="code-line-content">    <span class="kw">OriginAccessControlConfig</span>:</span></div>
+                <div class="code-line highlighted"><span class="code-line-number">5</span><span class="code-line-content">      <span class="str">SigningBehavior</span>: always</span></div>
+                <div class="code-line highlighted"><span class="code-line-number">6</span><span class="code-line-content">      <span class="str">SigningProtocol</span>: sigv4</span></div>
+                <div class="code-line"><span class="code-line-number">7</span><span class="code-line-content">      <span class="str">OriginAccessControlOriginType</span>: s3</span></div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- SIDEBAR DROITE -->
+    <aside class="sidebar-right">
+        <div class="toc-title">Sur cette page</div>
+        <a href="#architecture" class="toc-active-link">Architecture</a>
+
+        <div class="toc-section">
+            <div class="toc-section-title">Infrastructure</div>
+            <a href="#services" class="toc-link">Services AWS</a>
+            <a href="#cloudformation" class="toc-link">CloudFormation (SAM)</a>
+        </div>
+
+        <div class="toc-section">
+            <div class="toc-section-title">API</div>
+            <a href="#post-ingest" class="toc-link">POST /ingest</a>
+        </div>
+
+        <div class="toc-section">
+            <div class="toc-section-title">Lambda</div>
+            <a href="#handler" class="toc-link">Handler principal</a>
+            <a href="#metriques" class="toc-link">Calcul de metriques</a>
+        </div>
+
+        <div class="toc-section">
+            <div class="toc-section-title">Stockage</div>
+            <a href="#feature-store" class="toc-link">DynamoDB Feature Store</a>
+            <a href="#data-lake" class="toc-link">S3 Data Lake</a>
+            <a href="#partitioning" class="toc-link">Partitionnement S3</a>
+        </div>
+
+        <div class="toc-section">
+            <div class="toc-section-title">Securite</div>
+            <a href="#cloudfront-api" class="toc-link">CloudFront Ingestion</a>
+            <a href="#cloudfront-docs" class="toc-link">CloudFront OAC</a>
+        </div>
+    </aside>
+
+</div>
+
+</body>
+</html>
