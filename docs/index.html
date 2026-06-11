@@ -207,6 +207,8 @@
             .main-content { padding: 1.5rem 1rem; }
         }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+    <script>document.addEventListener('DOMContentLoaded', function() { mermaid.initialize({ startOnLoad: true, theme: 'base', themeVariables: { primaryColor: '#232f3e', primaryTextColor: '#ffffff', primaryBorderColor: '#ff9900', lineColor: '#ff9900', secondaryColor: '#f3f1ee', tertiaryColor: '#faf9f7', fontFamily: 'Inter, sans-serif', nodeTextColor: '#ffffff', clusterBkg: '#f8f7f5', clusterBorder: '#ff9900', titleColor: '#232f3e', edgeLabelBackground: '#ffffff' }}); });</script>
 </head>
 <body>
 
@@ -296,8 +298,45 @@
             le tout accelere par Amazon CloudFront.
         </p>
 
-        <div class="code-preview">
-            <span class="kw">POST</span> /ingest &rarr; <span class="fn">CloudFront</span> &rarr; <span class="fn">API Gateway</span> &rarr; <span class="fn">Lambda</span> &rarr; <span class="fn">S3 + DynamoDB</span>
+        <h2 id="diagramme">Diagramme d'architecture</h2>
+        <div class="mermaid">
+graph LR
+    subgraph Internet
+        IoT["Capteurs IoT<br/>(HTTP POST)"]
+        User["Utilisateur<br/>(navigateur)"]
+    end
+
+    subgraph AWS Cloud
+        subgraph CDN
+            CF1["CloudFront<br/>Ingestion CDN"]
+            CF2["CloudFront<br/>Documentation CDN"]
+        end
+
+        subgraph Compute
+            APIGW["API Gateway v2<br/>(HTTP API)"]
+            Lambda["AWS Lambda<br/>(Python 3.11)"]
+        end
+
+        subgraph Stockage
+            S3DL["S3 Data Lake<br/>raw-zone/year=/month=/"]
+            DDB["DynamoDB<br/>Feature Store"]
+            S3Doc["S3 Documentation<br/>(prive + OAC)"]
+        end
+
+        subgraph Monitoring
+            CW["CloudWatch<br/>Logs"]
+        end
+    end
+
+    IoT -->|POST /ingest| CF1
+    CF1 --> APIGW
+    APIGW --> Lambda
+    Lambda -->|PutObject| S3DL
+    Lambda -->|PutItem| DDB
+    Lambda -.->|logs| CW
+
+    User -->|HTTPS| CF2
+    CF2 -->|OAC SigV4| S3Doc
         </div>
 
         <h2 id="services">Services AWS</h2>
